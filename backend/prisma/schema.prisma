@@ -30,6 +30,7 @@ model User {
 
   sessions  EmergencySession[] @relation("DriverSessions")
   alerts    Alert[]
+  activityLogs ActivityLog[]
 }
 
 model EmergencySession {
@@ -82,4 +83,13 @@ model Alert {
   createdAt   DateTime @default(now())
   acknowledgedAt DateTime?
   resolvedAt  DateTime?
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  action      String
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  details     String?
+  createdAt   DateTime @default(now())
 }

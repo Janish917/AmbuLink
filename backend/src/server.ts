@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth';
+import emergencyRoutes from './routes/emergency';
 import { EmergencySessionService } from './services/EmergencySessionService';
 
 dotenv.config();
@@ -27,6 +28,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/emergency', emergencyRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'SAPS Backend is running' });

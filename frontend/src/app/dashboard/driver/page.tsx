@@ -8,6 +8,7 @@ import { PointMaterial, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import io from 'socket.io-client';
 import CyberAmbulance from '@/components/CyberAmbulance';
+import { useAudio } from '@/hooks/useAudio';
 
 const socket = io('http://localhost:5005');
 
@@ -141,6 +142,7 @@ export default function DriverDashboard() {
   const [isEmergency, setIsEmergency] = useState(false);
   const [activationPhase, setActivationPhase] = useState<'IDLE' | 'BIOMETRIC' | 'ACTIVE'>('IDLE');
   const [time, setTime] = useState('');
+  const { playBeep, playSiren, stopSiren } = useAudio();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -152,15 +154,20 @@ export default function DriverDashboard() {
 
   const handleActivation = () => {
     if (activationPhase === 'IDLE') {
+      playBeep('alert');
       setActivationPhase('BIOMETRIC');
       setTimeout(() => {
+        playBeep('success');
         setActivationPhase('ACTIVE');
         setIsEmergency(true);
+        playSiren();
         socket.emit('start_emergency', { unit: 'Unit 42', location: 'Central Hospital Base', eta: '08:45 MIN' });
       }, 2000); // 2 sec biometric scan
     } else if (activationPhase === 'ACTIVE') {
+      playBeep('alert');
       setActivationPhase('IDLE');
       setIsEmergency(false);
+      stopSiren();
     }
   };
 

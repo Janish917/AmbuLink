@@ -8,6 +8,7 @@ import { PointMaterial, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import io from 'socket.io-client';
 import CyberAmbulance from '@/components/CyberAmbulance';
+import { useAudio } from '@/hooks/useAudio';
 
 const socket = io('http://localhost:5005');
 
@@ -251,6 +252,7 @@ export default function PoliceDashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [activeRoute, setActiveRoute] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const { playBeep } = useAudio();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -293,10 +295,11 @@ export default function PoliceDashboard() {
         ...prev
       ]);
       setActiveRoute(true);
+      playBeep('alert');
     });
 
     return () => { socket.off('emergency_alert'); };
-  }, []);
+  }, [playBeep]);
 
   const acknowledgeAlert = (id: string) => {
     setAlerts(alerts.map(a => a.id === id ? { ...a, status: 'ACKNOWLEDGED' } : a));
