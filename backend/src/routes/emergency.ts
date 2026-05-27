@@ -1,5 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import { SessionRecordingService } from '../services/SessionRecordingService';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -82,6 +83,73 @@ router.post('/seed', async (req, res) => {
     res.json({ message: 'Seeded historical session and logs', session });
   } catch (error) {
     console.error('Error seeding data:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get replay data for a session
+router.get('/sessions/:id/replay', async (req, res) => {
+  try {
+    const data = await SessionRecordingService.getReplayData(req.params.id);
+    if (!data) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching replay data:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Export metrics report for a session
+router.post('/sessions/:id/export', async (req, res) => {
+  try {
+    const data = await SessionRecordingService.getReplayData(req.params.id);
+    if (!data) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=mission-replay-${req.params.id}.json`);
+    res.json({
+      exportedAt: new Date(),
+      sessionId: req.params.id,
+      missionSummary: {
+        driver: data.session.driver?.name || 'Unknown',
+        date: data.session.createdAt,
+        mode: data.session.emergencyMode,
+        severity: data.session.severity,
+        efficiencyScore: data.analytics.averageEfficiency,
+        reroutesEngaged: data.analytics.reroutesCount,
+        totalResponseTimeSeconds: data.analytics.totalResponseTimeSec,
+        delayPreventedSeconds: data.analytics.delayPreventedSec,
+      },
+      telemetry: data.session.telemetryLogs,
+      events: data.session.eventLogs,
+      reroutes: data.session.rerouteHistory,
+      obstructions: data.session.obstructionReports,
+    });
+  } catch (error) {
+    console.error('Error exporting session report:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// REST endpoint to report manual obstruction
+router.post('/sessions/:id/obstruction', async (req, res) => {
+  const { type, lat, lng, details } = req.body;
+  try {
+    const io = req.app.get('io'); // In case app has registered io
+    await SessionRecordingService.triggerManualObstruction(
+      req.params.id,
+      type,
+      Number(lat || 28.6160),
+      Number(lng || 77.2140),
+      details || null,
+      io || { emit: () => {} }
+    );
+    res.json({ success: true, message: 'Obstruction report processed' });
+  } catch (error) {
+    console.error('Error reporting obstruction:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

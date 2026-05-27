@@ -51,7 +51,7 @@ export class SimulationEngine {
    * 3. & 4. PROBABILISTIC ETA & IMPACT CALCULATION ENGINE
    * Runs Monte Carlo simulations to estimate reality-adjusted ETAs and Time Saved.
    */
-  static runMonteCarloTripSimulation(baseEtaMins: number, nodesCount: number, routeLengthKm: number) {
+  static runMonteCarloTripSimulation(baseEtaMins: number, nodesCount: number, routeLengthKm: number, emergencyMode: string = 'STANDARD') {
     const iterations = 500;
     let totalSimulatedMins = 0;
     let minEta = Infinity;
@@ -61,24 +61,54 @@ export class SimulationEngine {
     let minSaved = Infinity;
     let maxSaved = 0;
 
+    let baseBlockageChance = 0.45;
+    let minTimeSavedPerNode = 0.5;
+    let maxTimeSavedPerNode = 1.5;
+    let minHumanDelaySec = 60;
+    let maxHumanDelaySec = 180;
+    let confidence = 0.78;
+
+    if (emergencyMode === 'URBAN_CRITICAL') {
+      baseBlockageChance = 0.60;
+      minTimeSavedPerNode = 0.8;
+      maxTimeSavedPerNode = 2.2;
+      minHumanDelaySec = 30;
+      maxHumanDelaySec = 120;
+      confidence = 0.85;
+    } else if (emergencyMode === 'TRAUMA_HIGHWAY') {
+      baseBlockageChance = 0.25;
+      minTimeSavedPerNode = 0.3;
+      maxTimeSavedPerNode = 1.0;
+      minHumanDelaySec = 90;
+      maxHumanDelaySec = 300;
+      confidence = 0.70;
+    } else if (emergencyMode === 'ADAPTIVE_AI') {
+      baseBlockageChance = 0.35;
+      minTimeSavedPerNode = 0.6;
+      maxTimeSavedPerNode = 1.8;
+      minHumanDelaySec = 45;
+      maxHumanDelaySec = 150;
+      confidence = 0.82;
+    }
+
     for (let i = 0; i < iterations; i++) {
       let simEta = baseEtaMins;
       let simSaved = 0;
 
       // Simulate traffic at each node
       for (let n = 0; n < nodesCount; n++) {
-        const isBlocked = Math.random() < 0.45; // average blockage chance
+        const isBlocked = Math.random() < baseBlockageChance;
         if (isBlocked) {
           // Add delay (1 to 4 mins)
           simEta += 1 + Math.random() * 3;
         } else {
           // Green corridor successfully created -> save time!
-          simSaved += 0.5 + Math.random() * 1.5; // save 30s to 2 mins per cleared node
+          simSaved += minTimeSavedPerNode + Math.random() * (maxTimeSavedPerNode - minTimeSavedPerNode);
         }
       }
 
       // Add human response latency overall penalty (if they took too long, ambulance waits)
-      const humanDelayPenalty = (60 + Math.random() * 180) / 60; // 1 to 4 mins penalty randomly
+      const humanDelayPenalty = (minHumanDelaySec + Math.random() * (maxHumanDelaySec - minHumanDelaySec)) / 60;
       simEta += humanDelayPenalty;
 
       // Track min/max/totals
@@ -96,7 +126,6 @@ export class SimulationEngine {
 
     // 5. EMERGENCY CORRIDOR EFFICIENCY INDEX (ECEI)
     // Formula: (Expected Time Saved / Expected ETA) * 100 * Confidence
-    const confidence = 0.78; // Stochastic confidence factor
     let ecei = (expectedSaved / expectedEta) * 100 * confidence * 2; // Scaled to 0-100
     ecei = Math.min(Math.max(ecei, 0), 100);
 
