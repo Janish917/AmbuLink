@@ -8,88 +8,166 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  email       String?  @unique
-  passwordHash String
-  name        String
-  role        String   @default("DRIVER") // "DRIVER", "HOSPITAL", "POLICE", "SYSTEM_NODE"
-  driverId    String?  @unique
-  hospitalId  String?  @unique
-  policeId    String?  @unique
-  location    String?  
-  lat         Float?
-  lng         Float?
-  nodeType    String?  // 'POLICE_STATION', 'TRAFFIC_SIGNAL', 'HOSPITAL'
-  status      String   @default("NORMAL") 
-  isVerified  Boolean  @default(false)
-  otpCode     String?
-  otpExpiry   DateTime?
-  lastLogin   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  sessions  EmergencySession[] @relation("DriverSessions")
-  alerts    Alert[]
-  activityLogs ActivityLog[]
+  id                   String             @id @default(uuid())
+  email                String?            @unique
+  passwordHash         String
+  name                 String
+  role                 String             @default("DRIVER")
+  driverId             String?            @unique
+  hospitalId           String?            @unique
+  policeId             String?            @unique
+  location             String?
+  lat                  Float?
+  lng                  Float?
+  nodeType             String?
+  status               String             @default("NORMAL")
+  isVerified           Boolean            @default(false)
+  otpCode              String?
+  otpExpiry            DateTime?
+  lastLogin            DateTime?
+  registeredHospitalId String?
+  verificationStatus   String             @default("pending")
+  approvedBy           String?
+  approvedAt           DateTime?
+  phone                String?
+  ambulanceNumber      String?
+  employmentStatus     String             @default("active")
+  shiftType            String?            @default("MORNING")
+  shiftStart           String?            @default("06:00")
+  shiftEnd             String?            @default("14:00")
+  joinedAt             DateTime           @default(now())
+  resignedAt           DateTime?
+  emergencyCount       Int                @default(0)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  activityLogs         ActivityLog[]
+  alerts               Alert[]
+  sessions             EmergencySession[] @relation("DriverSessions")
 }
 
 model EmergencySession {
-  id          String   @id @default(uuid())
-  driverId    String
-  driver      User     @relation("DriverSessions", fields: [driverId], references: [id])
-  status      String   @default("ACTIVE") // "CREATED", "ACTIVE", "COMPLETED", "CANCELLED"
-  severity    Int      @default(1) // 1 to 5
-  startLat    Float
-  startLng    Float
-  endLat      Float
-  endLng      Float
-  currentLat  Float?
-  currentLng  Float?
-  routePolyline String? // Encoded polyline from Maps API
-  routePoints String?   // Detailed timeline prediction points JSON
-  // --- V3 PROBABILISTIC FIELDS ---
-  etaExpected Int?
-  etaBest     Int?
-  etaWorst    Int?
-  etaConfidence Float?
+  id                   String    @id @default(uuid())
+  driverId             String
+  status               String    @default("ACTIVE")
+  severity             Int       @default(1)
+  startLat             Float
+  startLng             Float
+  endLat               Float
+  endLng               Float
+  currentLat           Float?
+  currentLng           Float?
+  routePolyline        String?
+  routePoints          String?
+  etaExpected          Int?
+  etaBest              Int?
+  etaWorst             Int?
+  etaConfidence        Float?
   expectedTimeSavedMin Float?
   expectedTimeSavedMax Float?
-  eceiScore   Float?    // Emergency Corridor Efficiency Index (0-100)
-  // -------------------------------
-  startTime   DateTime?
-  endTime     DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  eceiScore            Float?
+  startTime            DateTime?
+  endTime              DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  alerts      Alert[]
+  // --- ADAPTIVE CORRIDOR FIELDS ---
+  emergencyMode           String   @default("STANDARD") // "URBAN_CRITICAL", "STANDARD", "TRAUMA_HIGHWAY", "ADAPTIVE_AI", "MANUAL"
+  corridorRadius          Float    @default(1500.0) // in meters
+  adaptiveReason          String?
+  publicAlertRadius       Float    @default(500.0) // in meters
+  policeAlertRadius       Float    @default(2000.0) // in meters
+  signalAlertRadius       Float    @default(1200.0) // in meters
+  corridorEfficiencyScore Float?
+
+  alerts               Alert[]
+  driver               User      @relation("DriverSessions", fields: [driverId], references: [id])
+
+  // --- PREDICTIVE REROUTING FIELDS ---
+  routeStability          Float?            @default(90.0)
+  rerouteProbability      Float?            @default(10.0)
+  congestionRisk          String?           @default("LOW")
+  originalRoutePolyline   String?
+  backupRoutePolyline     String?
+  fastestRoutePolyline    String?
+  reroutesCount           Int               @default(0)
+  trafficHeatmapData      String?           // JSON string of heatmap coordinates and weights
+  estimatedDelayIncrease  Int?              @default(0)
+  emergencyPressureScore  Float?            @default(20.0)
+
+  telemetryLogs           TelemetryLog[]
+  rerouteHistory          RerouteHistory[]
+  eventLogs               EmergencyEventLog[]
+  obstructionReports      ObstructionReport[]
 }
 
 model Alert {
-  id          String   @id @default(uuid())
-  sessionId   String
-  session     EmergencySession @relation(fields: [sessionId], references: [id])
-  receiverId  String
-  receiver    User     @relation(fields: [receiverId], references: [id])
-  status      String   @default("CREATED") // "CREATED", "SENT", "ACKNOWLEDGED", "RESOLVED"
-  message     String
-  etaToNode   Int?     // Base ETA
-  distanceToNode Float? // Meters
-  // --- V3 PROBABILISTIC FIELDS ---
-  expectedResponseMin Int? // seconds
-  expectedResponseMax Int? // seconds
-  responseConfidence  Float?
-  bottleneckProbability Float? // 0.0 to 1.0 chance of traffic failure at this node
-  // -------------------------------
-  createdAt   DateTime @default(now())
-  acknowledgedAt DateTime?
-  resolvedAt  DateTime?
+  id                    String           @id @default(uuid())
+  sessionId             String
+  receiverId            String
+  status                String           @default("CREATED")
+  message               String
+  etaToNode             Int?
+  distanceToNode        Float?
+  createdAt             DateTime         @default(now())
+  acknowledgedAt        DateTime?
+  resolvedAt            DateTime?
+  bottleneckProbability Float?
+  expectedResponseMax   Int?
+  expectedResponseMin   Int?
+  responseConfidence    Float?
+  receiver              User             @relation(fields: [receiverId], references: [id])
+  session               EmergencySession @relation(fields: [sessionId], references: [id])
 }
 
 model ActivityLog {
-  id          String   @id @default(uuid())
-  action      String
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id])
-  details     String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  action    String
+  userId    String?
+  details   String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model TelemetryLog {
+  id               String           @id @default(uuid())
+  sessionId        String
+  lat              Float
+  lng              Float
+  speed            Float
+  heading          Float
+  congestionLevel  Float
+  timestamp        DateTime         @default(now())
+  session          EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model RerouteHistory {
+  id               String           @id @default(uuid())
+  sessionId        String
+  reason           String
+  oldRoutePoints   String
+  newRoutePoints   String
+  oldEta           Int
+  newEta           Int
+  timestamp        DateTime         @default(now())
+  session          EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model EmergencyEventLog {
+  id               String           @id @default(uuid())
+  sessionId        String
+  eventType        String
+  description      String
+  timestamp        DateTime         @default(now())
+  session          EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model ObstructionReport {
+  id        String   @id @default(uuid())
+  sessionId String
+  type      String   // "ACCIDENT", "PROTEST", "CONSTRUCTION", "FLOOD", "ROADBLOCK", "VIP_CONVOY"
+  lat       Float
+  lng       Float
+  details   String?
+  createdAt DateTime @default(now())
+  session   EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }

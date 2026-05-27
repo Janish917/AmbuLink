@@ -10,7 +10,7 @@ import axios from 'axios';
 const socket = io('http://localhost:5005');
 
 export default function ControlRoomDashboard() {
-  const [activeSessions, setActiveSessions] = useState([
+  const [activeSessions, setActiveSessions] = useState<any[]>([
     { 
       id: '1', 
       unit: 'Unit 42', 
@@ -19,7 +19,10 @@ export default function ControlRoomDashboard() {
       severity: 4, 
       status: 'ACTIVE',
       bottleneck: 'CP Junction',
-      bottleneckRisk: 0.65
+      bottleneckRisk: 0.65,
+      emergencyMode: 'STANDARD',
+      corridorRadius: 1500,
+      corridorPrepStatus: 'BALANCED FLOW cleared'
     }
   ]);
 
@@ -46,23 +49,74 @@ export default function ControlRoomDashboard() {
         bottleneckRisk = highestRisk.bottleneckRisk;
       }
 
+      const corridorPrepStatus = data.emergencyMode === 'URBAN_CRITICAL' 
+        ? 'PREEMPTIVE INTERACTION ACTIVE' 
+        : data.emergencyMode === 'TRAUMA_HIGHWAY' 
+        ? 'LONG-RANGE CLEARANCE DEPLOYED' 
+        : 'BALANCED FLOW cleared';
+
       setActiveSessions(prev => [
         { 
-          id: Math.random().toString(), 
-          unit: data.unit, 
+          id: data.id || Math.random().toString(), 
+          unit: data.unit || 'Unit 42', 
           etaExpected, 
           eceiScore,
-          severity: 5, 
+          severity: data.severity || 5, 
           status: 'ACTIVE',
           bottleneck,
-          bottleneckRisk
+          bottleneckRisk,
+          emergencyMode: data.emergencyMode || 'STANDARD',
+          corridorRadius: data.corridorRadius || 1500,
+          corridorPrepStatus
         },
         ...prev
       ]);
     });
 
+    socket.on('telemetry_update', (data) => {
+      setActiveSessions(prev => prev.map(s => {
+        if (s.unit === 'Unit 42') {
+          return { ...s, etaExpected: `${data.etaExpected}m` };
+        }
+        return s;
+      }));
+    });
+
+    socket.on('reroute_triggered', (data) => {
+      setActiveSessions(prev => prev.map(s => {
+        if (s.unit === 'Unit 42') {
+          return { 
+            ...s, 
+            etaExpected: `${data.newEta}m`,
+            corridorPrepStatus: 'REROUTE ENGAGED - BYPASS ACTIVE'
+          };
+        }
+        return s;
+      }));
+    });
+
+    socket.on('obstruction_reported', (data) => {
+      setActiveSessions(prev => prev.map(s => {
+        if (s.unit === 'Unit 42') {
+          return {
+            ...s,
+            corridorPrepStatus: `OBSTRUCTION: ${data.type} DETECTED`
+          };
+        }
+        return s;
+      }));
+    });
+
+    socket.on('emergency_completed', () => {
+      setActiveSessions([]);
+    });
+
     return () => {
       socket.off('emergency_alert');
+      socket.off('telemetry_update');
+      socket.off('reroute_triggered');
+      socket.off('emergency_completed');
+      socket.off('obstruction_reported');
     };
   }, []);
 
@@ -75,13 +129,13 @@ export default function ControlRoomDashboard() {
     }
   };
 
-  const verifyUser = async (targetUserId: string) => {
+  const verifyUser = async (targetUserId: string, action: 'approve' | 'reject') => {
     try {
-      await axios.post('http://localhost:5005/api/auth/verify', { targetUserId }, { withCredentials: true });
+      await axios.post('http://localhost:5005/api/auth/verify', { targetUserId, action }, { withCredentials: true });
       // Remove from list
       setPendingUsers(prev => prev.filter(u => u.id !== targetUserId));
     } catch (err) {
-      console.error('Failed to verify user');
+      console.error('Failed to verify user:', err);
     }
   };
 
@@ -111,23 +165,51 @@ export default function ControlRoomDashboard() {
 
         {/* Pending Verification Panel */}
         {pendingUsers.length > 0 && (
-          <div className="mt-2 glass-panel p-4 rounded-xl border border-orange-500/40 bg-orange-500/5">
-            <h3 className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <UserCheck className="w-4 h-4" /> Pending Access Requests ({pendingUsers.length})
+          <div className="mt-2 glass-panel p-4 rounded-2xl border border-amber-500/30 bg-amber-500/[0.02] shadow-[0_0_30px_rgba(245,158,11,0.05)]">
+            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <UserCheck className="w-4 h-4" /> Pending Driver Access ({pendingUsers.length})
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {pendingUsers.map(user => (
-                <div key={user.id} className="flex items-center justify-between p-2 rounded bg-black/40 border border-white/5">
-                  <div>
-                    <div className="text-sm text-white font-bold">{user.name}</div>
-                    <div className="text-[10px] text-white/50 uppercase">{user.role} | {user.driverId || user.hospitalId}</div>
+                <div key={user.id} className="p-4 rounded-xl bg-black/60 border border-white/5 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="text-sm font-bold text-white tracking-wide">{user.name}</div>
+                      <div className="text-[10px] text-white/50 font-mono mt-0.5">ID: {user.driverId || 'N/A'}</div>
+                    </div>
+                    {user.ambulanceNumber && (
+                      <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[9px] font-mono border border-blue-500/20 uppercase">
+                        {user.ambulanceNumber}
+                      </span>
+                    )}
                   </div>
-                  <button 
-                    onClick={() => verifyUser(user.id)}
-                    className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded transition-colors"
-                  >
-                    VERIFY
-                  </button>
+                  
+                  {/* Driver Details */}
+                  <div className="text-[10px] text-white/60 space-y-1 bg-white/[0.02] p-2 rounded-lg border border-white/5 font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Phone:</span>
+                      <span>{user.phone || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Email:</span>
+                      <span className="truncate max-w-[180px]">{user.email || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button 
+                      onClick={() => verifyUser(user.id, 'approve')}
+                      className="flex-1 py-1.5 bg-green-600/90 hover:bg-green-500 text-white text-xs font-black rounded-lg transition-all tracking-wider uppercase shadow-[0_0_15px_rgba(34,197,94,0.2)]"
+                    >
+                      Approve
+                    </button>
+                    <button 
+                      onClick={() => verifyUser(user.id, 'reject')}
+                      className="flex-1 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/30 text-red-400 text-xs font-black rounded-lg transition-all tracking-wider uppercase"
+                    >
+                      Reject
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -212,6 +294,22 @@ export default function ControlRoomDashboard() {
                     <div className="text-[10px] text-white/40 uppercase">Critical Bottleneck</div>
                     <div className="text-xs text-white font-medium truncate">{session.bottleneck}</div>
                     <div className="text-[10px] text-red-400 font-bold">{Math.round(session.bottleneckRisk * 100)}% Failure Risk</div>
+                  </div>
+                </div>
+
+                {/* Corridor Preparation Status HUD */}
+                <div className="mb-4 p-3 rounded-lg bg-black/40 border border-white/5 space-y-1.5 text-[10px]">
+                  <div className="flex justify-between text-white/50">
+                    <span>Active Corridor Mode:</span>
+                    <span className="font-bold text-purple-400 uppercase">{session.emergencyMode || 'STANDARD'}</span>
+                  </div>
+                  <div className="flex justify-between text-white/50">
+                    <span>Preparation Status:</span>
+                    <span className="font-bold text-green-400 uppercase animate-pulse">{session.corridorPrepStatus || 'SECURE CORRIDOR CREATED'}</span>
+                  </div>
+                  <div className="flex justify-between text-white/50">
+                    <span>Alert Boundary:</span>
+                    <span className="font-mono text-white/80">{session.corridorRadius || 1500} meters</span>
                   </div>
                 </div>
 

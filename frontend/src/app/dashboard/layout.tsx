@@ -59,10 +59,16 @@ export default async function DashboardLayout({
           )}
 
           {userRole === 'HOSPITAL' && (
-            <Link href="/dashboard/hospital" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
-              <div className="w-2 h-2 rounded-full bg-purple-500" />
-              Hospital Command
-            </Link>
+            <>
+              <Link href="/dashboard/hospital" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
+                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                Hospital Command
+              </Link>
+              <Link href="/dashboard/workforce" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                Workforce Management
+              </Link>
+            </>
           )}
 
           {/* Everyone can see Replay for now, or maybe only POLICE/HOSPITAL */}
