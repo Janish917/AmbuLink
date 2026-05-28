@@ -98,6 +98,11 @@ model EmergencySession {
   rerouteHistory          RerouteHistory[]
   eventLogs               EmergencyEventLog[]
   obstructionReports      ObstructionReport[]
+  stabilityHistory        CorridorStabilityHistory[]
+  congestionSnapshots     CongestionSnapshot[]
+  pressureLogs            EmergencyPressureLog[]
+  rerouteTriggers         RerouteTrigger[]
+  policeInterventions     PoliceIntervention[]
 }
 
 model Alert {
@@ -170,4 +175,52 @@ model ObstructionReport {
   details   String?
   createdAt DateTime @default(now())
   session   EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model CorridorStabilityHistory {
+  id                 String           @id @default(uuid())
+  sessionId          String
+  stabilityScore     Float
+  congestionRisk     String
+  signalGridStatus   String
+  rerouteProbability Float
+  timestamp          DateTime         @default(now())
+  session            EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model CongestionSnapshot {
+  id        String           @id @default(uuid())
+  sessionId String
+  density   Float
+  riskLevel String
+  timestamp DateTime         @default(now())
+  session   EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model EmergencyPressureLog {
+  id            String           @id @default(uuid())
+  sessionId     String
+  pressureScore Float
+  timestamp     DateTime         @default(now())
+  session       EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model RerouteTrigger {
+  id          String           @id @default(uuid())
+  sessionId   String
+  triggerType String           // "AUTO", "MANUAL"
+  reason      String
+  oldRoute    String?
+  newRoute    String?
+  timestamp   DateTime         @default(now())
+  session     EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model PoliceIntervention {
+  id             String           @id @default(uuid())
+  sessionId      String
+  actionType     String           // "OVERRIDE_PRIORITY", "FORCE_PREEMPTION", "INCREASE_RADIUS", "ACTIVATE_ALTERNATE"
+  details        String?
+  timestamp      DateTime         @default(now())
+  session        EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }

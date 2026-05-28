@@ -40,7 +40,7 @@ function HolographicParticles({ color }: { color: string }) {
   return (
     <points ref={pointsRef}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute {...({ attach: "attributes-position", count: count, array: positions, itemSize: 3 } as any)} />
       </bufferGeometry>
       <PointMaterial size={0.1} color={color} transparent opacity={0.6} sizeAttenuation blending={THREE.AdditiveBlending} />
     </points>
@@ -96,6 +96,11 @@ export default function LoginPage() {
   const [nonce, setNonce] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [registeredHospitalId, setRegisteredHospitalId] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [ambulanceNumber, setAmbulanceNumber] = useState('');
+  const [hospitals, setHospitals] = useState<{ hospitalId: string, name: string }[]>([]);
 
   // Cinematic States
   const [authStatus, setAuthStatus] = useState<AuthStatus>('idle');
@@ -118,6 +123,21 @@ export default function LoginPage() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  useEffect(() => {
+    const fetchHospitals = async () => {
+      try {
+        const res = await axios.get('http://localhost:5005/api/auth/hospitals');
+        setHospitals(res.data);
+        if (res.data.length > 0) {
+          setRegisteredHospitalId(res.data[0].hospitalId);
+        }
+      } catch (err) {
+        console.error('Failed to fetch hospitals:', err);
+      }
+    };
+    fetchHospitals();
+  }, []);
+
   const resetForm = () => {
     setUserId('');
     setPassword('');
@@ -125,6 +145,14 @@ export default function LoginPage() {
     setNonce('');
     setOtp('');
     setNewPassword('');
+    setPhone('');
+    setEmail('');
+    setAmbulanceNumber('');
+    if (hospitals.length > 0) {
+      setRegisteredHospitalId(hospitals[0].hospitalId);
+    } else {
+      setRegisteredHospitalId('');
+    }
     setErrorMsg('');
     setSuccessMsg('');
     setAuthStatus('idle');
@@ -182,7 +210,7 @@ export default function LoginPage() {
     e.stopPropagation();
 
     if (!userId || !password) {
-      setErrorMsg('Terminal ID and Passkey are required.');
+      setErrorMsg('Driver/Terminal ID and Passkey are required.');
       setAuthStatus('error');
       setTimeout(() => setAuthStatus('idle'), 2000);
       return;
@@ -196,20 +224,36 @@ export default function LoginPage() {
     try {
       if (isRegistering) {
         setLoadingText('Registering Node Protocol...');
-        await axios.post('http://localhost:5005/api/auth/register', {
-          role: activeRole, id: userId, name: name, password: password, nonce: nonce
-        });
-        setSuccessMsg('Node registered! Pending AI verification.');
+        const payload: any = {
+          role: activeRole,
+          id: userId,
+          name: name,
+          password: password,
+          nonce: activeRole !== 'DRIVER' ? nonce : undefined,
+          registeredHospitalId: activeRole === 'DRIVER' ? registeredHospitalId : undefined,
+          phone: activeRole === 'DRIVER' ? phone : undefined,
+          email: activeRole === 'DRIVER' ? email : undefined,
+          ambulanceNumber: activeRole === 'DRIVER' ? ambulanceNumber : undefined,
+        };
+        await axios.post('http://localhost:5005/api/auth/register', payload);
+        if (activeRole === 'DRIVER') {
+          setSuccessMsg('Registration submitted. Pending hospital approval.');
+        } else {
+          setSuccessMsg('Node registered successfully.');
+        }
         setIsRegistering(false); 
         setPassword(''); 
         setNonce(''); 
         setName('');
+        setPhone('');
+        setEmail('');
+        setAmbulanceNumber('');
         setAuthStatus('success');
         setTimeout(() => setAuthStatus('idle'), 2000);
       } else {
         // Simulated AI Loading Phases for cinematic effect
         setTimeout(() => setLoadingText('Bypassing Node Security...'), 400);
-        setTimeout(() => setLoadingText('AI Verification Running...'), 800);
+        setTimeout(() => setLoadingText('Verifying Authority...'), 800);
 
         const response = await axios.post('http://localhost:5005/api/auth/login', {
           role: activeRole, id: userId, password: password
@@ -234,7 +278,7 @@ export default function LoginPage() {
       // Reset after glitch
       setTimeout(() => {
         setAuthStatus('idle');
-      }, 1500);
+      }, 3500); // give them a bit longer to read pending/rejected status
     }
   };
 
@@ -387,24 +431,60 @@ export default function LoginPage() {
                           <AnimatePresence mode="popLayout">
                             {isRegistering && (
                               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-5 overflow-hidden">
-                                <div>
-                                  <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Auth Nonce</label>
-                                  <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="w-4 h-4 text-white/30" /></div>
-                                    <input value={nonce} onChange={e => setNonce(e.target.value)} type="text" placeholder="SAPS-AUTH-2026" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
-                                  </div>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Operator Name</label>
-                                  <input value={name} onChange={e => setName(e.target.value)} type="text" placeholder="John Doe" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
-                                </div>
+                                {activeRole !== 'DRIVER' ? (
+                                  <>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Auth Nonce</label>
+                                      <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="w-4 h-4 text-white/30" /></div>
+                                        <input value={nonce} onChange={e => setNonce(e.target.value)} type="text" placeholder="SAPS-AUTH-2026" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Operator Name</label>
+                                      <input value={name} onChange={e => setName(e.target.value)} type="text" placeholder="John Doe" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Full Name</label>
+                                      <input value={name} onChange={e => setName(e.target.value)} required type="text" placeholder="John Doe" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Hospital Name</label>
+                                      <select value={registeredHospitalId} onChange={e => setRegisteredHospitalId(e.target.value)} required className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-colors font-semibold" disabled={authStatus === 'authenticating'}>
+                                        <option value="" disabled>Select a hospital...</option>
+                                        {hospitals.map(h => (
+                                          <option key={h.hospitalId} value={h.hospitalId} className="bg-[#050816] text-white">
+                                            {h.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Phone Number (Optional)</label>
+                                      <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" placeholder="+1 (555) 019-2834" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Email Address (Optional)</label>
+                                      <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="driver@hospital.com" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Ambulance Number (Optional)</label>
+                                      <input value={ambulanceNumber} onChange={e => setAmbulanceNumber(e.target.value)} type="text" placeholder="AMB-409" className="w-full bg-black/50 border border-white/10 text-white text-sm rounded-xl py-3 px-4 focus:outline-none focus:border-white/30 transition-colors" disabled={authStatus === 'authenticating'} />
+                                    </div>
+                                  </>
+                                )}
                               </motion.div>
                             )}
                           </AnimatePresence>
 
                           {/* ID Field */}
                           <div>
-                            <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">Terminal ID</label>
+                            <label className="block text-[10px] font-bold text-white/50 mb-2 uppercase tracking-[0.2em]">
+                              {activeRole === 'DRIVER' ? 'Driver ID' : 'Terminal ID'}
+                            </label>
                             <div className="relative">
                               {!isRegistering && !isForgotPassword && <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Terminal className="w-4 h-4 text-white/30" /></div>}
                               <input value={userId} onChange={e => setUserId(e.target.value)} required type="text" placeholder={r.placeholder} className={`w-full bg-black/50 border ${authStatus === 'error' ? 'border-red-500/50' : 'border-white/10'} text-white text-sm rounded-xl py-3 pr-4 focus:outline-none focus:border-white/30 transition-colors ${isRegistering || isForgotPassword ? 'pl-4' : 'pl-10'}`} disabled={authStatus === 'authenticating'} />
@@ -461,9 +541,24 @@ export default function LoginPage() {
                                    <div className="absolute top-0 left-0 h-full w-1/2 bg-white/50 animate-[scan_1s_ease-in-out_infinite]" />
                                  </div>
                                  <span className="text-xs font-mono tracking-widest text-white/70 uppercase text-center mt-2">{loadingText}</span>
-                               </motion.div>
+                                </motion.div>
                             )}
-                            {errorMsg && authStatus !== 'authenticating' && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-4 rounded-xl text-center font-mono tracking-wide">{errorMsg}</motion.div>}
+                            {errorMsg && authStatus !== 'authenticating' && (
+                              <motion.div 
+                                initial={{ opacity: 0, height: 0 }} 
+                                animate={{ opacity: 1, height: 'auto' }} 
+                                exit={{ opacity: 0, height: 0 }} 
+                                className={`text-xs p-4 rounded-xl text-center font-mono tracking-wide border ${
+                                  errorMsg.includes('pending') 
+                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
+                                    : errorMsg.includes('rejected')
+                                    ? 'bg-red-950/20 border-red-600/30 text-red-500 animate-pulse'
+                                    : 'bg-red-500/10 border-red-500/20 text-red-400'
+                                }`}
+                              >
+                                {errorMsg}
+                              </motion.div>
+                            )}
                             {successMsg && authStatus !== 'authenticating' && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-green-500/10 border border-green-500/20 text-green-400 text-xs p-4 rounded-xl text-center font-mono tracking-wide">{successMsg}</motion.div>}
                           </AnimatePresence>
 
@@ -477,7 +572,7 @@ export default function LoginPage() {
                               ) : authStatus === 'success' ? (
                                 <span className="relative z-10 flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> Authorized</span>
                               ) : (
-                                <span className="relative z-10">{isRegistering ? 'Register Node' : 'Establish Connection'}</span>
+                                <span className="relative z-10">{isRegistering ? (activeRole === 'DRIVER' ? 'Submit Registration' : 'Register Node') : 'Establish Connection'}</span>
                               )}
                             </button>
                           )}

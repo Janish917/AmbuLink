@@ -114,7 +114,7 @@ function Particles() {
   return (
     <points ref={pointsRef}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute {...({ attach: "attributes-position", count: count, array: positions, itemSize: 3 } as any)} />
       </bufferGeometry>
       <pointsMaterial size={0.05} color="#00c2ff" transparent opacity={0.6} sizeAttenuation blending={THREE.AdditiveBlending} />
     </points>
@@ -160,7 +160,7 @@ function SceneContents({ mouse }: { mouse: { x: number, y: number } }) {
         </mesh>
       </Float>
 
-      <EffectComposer disableNormalPass>
+      <EffectComposer {...({ disableNormalPass: true } as any)}>
         <Bloom luminanceThreshold={0.2} mipmapBlur intensity={1.5} />
         <Noise opacity={0.03} />
         <Vignette eskil={false} offset={0.1} darkness={1.1} />

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ShieldAlert, Play, Pause, FastForward, Rewind, Activity, Clock, Navigation, History, FileText } from 'lucide-react';
+import { ShieldAlert, Play, Pause, FastForward, Rewind, Activity, Clock, Navigation, History, FileText, Database } from 'lucide-react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { PointMaterial, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -38,7 +38,10 @@ function HolographicCity({ activeRoute }: { activeRoute: boolean }) {
   useFrame((state) => {
     if (meshRef.current) {
       const targetColor = activeRoute ? alertColor : baseColor;
-      meshRef.current.material.color.lerp(targetColor, 0.05);
+      const mat = meshRef.current.material as any;
+      if (mat && mat.color) {
+        mat.color.lerp(targetColor, 0.05);
+      }
       meshRef.current.position.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.1;
     }
   });
