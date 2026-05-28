@@ -8,6 +8,7 @@ import { PointMaterial, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import io from 'socket.io-client';
 import CyberAmbulance from '@/components/CyberAmbulance';
+import MapContainer from '@/components/MapContainer';
 import { useAudio } from '@/hooks/useAudio';
 
 const socket = io('http://localhost:5005');
@@ -43,7 +44,10 @@ function CityBuildings({ isEmergency }: { isEmergency: boolean }) {
 
   useFrame(() => {
     if (meshRef.current) {
-      meshRef.current.material.color.lerp(isEmergency ? emergencyColor : baseColor, 0.05);
+      const mat = meshRef.current.material as any;
+      if (mat && mat.color) {
+        mat.color.lerp(isEmergency ? emergencyColor : baseColor, 0.05);
+      }
     }
   });
 
@@ -144,6 +148,66 @@ export default function DriverDashboard() {
   const [time, setTime] = useState('');
   const { playBeep, playSiren, stopSiren } = useAudio();
 
+  // Dynamic Emergency Corridor configurations
+  const [emergencyMode, setEmergencyMode] = useState('STANDARD');
+  const [manualRadius, setManualRadius] = useState(1500);
+  const [recommendedMode, setRecommendedMode] = useState('STANDARD');
+  const [recommendationReason, setRecommendationReason] = useState('');
+
+  // Active status from backend
+  const [activeCorridorRadius, setActiveCorridorRadius] = useState(1500);
+  const [activePublicRadius, setActivePublicRadius] = useState(500);
+  const [activeSignalRadius, setActiveSignalRadius] = useState(1200);
+  const [activePoliceRadius, setActivePoliceRadius] = useState(2000);
+  const [adaptiveReason, setAdaptiveReason] = useState<string | null>(null);
+  const [eceiScore, setEceiScore] = useState(85);
+  const [estimatedDelayReduction, setEstimatedDelayReduction] = useState(180);
+
+  // Predictive Rerouting & Playback States
+  const [routeStability, setRouteStability] = useState(95.0);
+  const [rerouteProbability, setRerouteProbability] = useState(5.0);
+  const [congestionRisk, setCongestionRisk] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('LOW');
+  const [activeTab, setActiveTab] = useState<'active' | 'backup' | 'fastest'>('active');
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [is2DMode, setIs2DMode] = useState(false);
+  const [reroutedAlert, setReroutedAlert] = useState<string | null>(null);
+  const [reportedObstruction, setReportedObstruction] = useState<{ type: string; details: string | null } | null>(null);
+  const [emergencyPressureScore, setEmergencyPressureScore] = useState(20.0);
+  const [estimatedDelayIncrease, setEstimatedDelayIncrease] = useState(0);
+  const [ambulanceCoords, setAmbulanceCoords] = useState<[number, number]>([28.6139, 77.2090]);
+  const [activeRoutePoints, setActiveRoutePoints] = useState<[number, number][]>([
+    [28.6139, 77.2090],
+    [28.6145, 77.2110],
+    [28.6160, 77.2140],
+    [28.6190, 77.2180],
+    [28.6250, 77.2250]
+  ]);
+  const [backupRoutePoints, setBackupRoutePoints] = useState<[number, number][]>([
+    [28.6139, 77.2090],
+    [28.6175, 77.2095],
+    [28.6210, 77.2150],
+    [28.6235, 77.2200],
+    [28.6250, 77.2250]
+  ]);
+  const [fastestRoutePoints, setFastestRoutePoints] = useState<[number, number][]>([
+    [28.6139, 77.2090],
+    [28.6110, 77.2130],
+    [28.6150, 77.2220],
+    [28.6220, 77.2260],
+    [28.6250, 77.2250]
+  ]);
+
+  const [trafficSignals, setTrafficSignals] = useState<any[]>([
+    { lat: 28.6145, lng: 77.2110, name: 'Connaught Place Signal 1', status: 'NORMAL' },
+    { lat: 28.6160, lng: 77.2140, name: 'Connaught Place Signal 2', status: 'NORMAL' },
+    { lat: 28.6190, lng: 77.2180, name: 'Connaught Place Signal 3', status: 'NORMAL' }
+  ]);
+
+  const [alertFeed, setAlertFeed] = useState<string[]>([
+    "System check complete. Primary CP corridor active.",
+    "Corridor monitoring online. Signal network connected."
+  ]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -151,6 +215,92 @@ export default function DriverDashboard() {
     }, 50);
     return () => clearInterval(timer);
   }, []);
+
+  // Smart recommendation logic based on peak hour and high-speed indicators
+  useEffect(() => {
+    const hour = new Date().getHours();
+    const isPeakHour = (hour >= 8 && hour <= 10) || (hour >= 17 && hour <= 19);
+    
+    if (isPeakHour) {
+      setRecommendedMode('ADAPTIVE_AI');
+      setRecommendationReason('Heavy peak traffic detected. Adaptive AI will auto-scale radius layers.');
+    } else {
+      const mockHighwayRoute = true;
+      if (mockHighwayRoute) {
+        setRecommendedMode('TRAUMA_HIGHWAY');
+        setRecommendationReason('High-speed highway route detected. Trauma/Highway mode prepares long-range boundaries.');
+      } else {
+        setRecommendedMode('STANDARD');
+        setRecommendationReason('Balanced traffic conditions detected.');
+      }
+    }
+  }, []);
+
+  // Listen to socket broadcasts to synchronize dynamic simulations
+  useEffect(() => {
+    socket.on('emergency_alert', (data) => {
+      if (data.unit === 'Unit 42') {
+        setActiveCorridorRadius(data.corridorRadius || 1500);
+        setActivePublicRadius(data.publicAlertRadius || 500);
+        setActiveSignalRadius(data.signalAlertRadius || 1200);
+        setActivePoliceRadius(data.policeAlertRadius || 2000);
+        setAdaptiveReason(data.adaptiveReason || null);
+        if (data.simulation) {
+          setEceiScore(data.simulation.eceiScore || 85);
+          setEstimatedDelayReduction(Math.round(data.simulation.timeSaved.expected * 60) || 120);
+        }
+      }
+    });
+
+    socket.on('telemetry_update', (data) => {
+      if (isEmergency) {
+        setAmbulanceCoords([data.lat, data.lng]);
+        setRouteStability(data.routeStability);
+        setRerouteProbability(data.rerouteProbability);
+        setCongestionRisk(data.congestionRisk);
+        setEstimatedDelayIncrease(data.estimatedDelayIncrease || 0);
+        setEmergencyPressureScore(data.emergencyPressureScore || 20.0);
+      }
+    });
+
+    socket.on('obstruction_reported', (data) => {
+      if (isEmergency) {
+        playBeep('alert');
+        setReportedObstruction({ type: data.type, details: data.details });
+        setAlertFeed(prev => [`[WARNING] ${data.type} obstruction reported ahead!`, ...prev]);
+        setTimeout(() => setReportedObstruction(null), 6000);
+      }
+    });
+
+    socket.on('reroute_triggered', (data) => {
+      if (isEmergency) {
+        playBeep('alert');
+        setReroutedAlert(data.reason);
+        // Swap primary route coordinates dynamically!
+        setActiveRoutePoints(backupRoutePoints);
+        setAlertFeed(prev => [`[ALERT] REROUTE ACTIVE: ${data.reason}`, ...prev]);
+        setTimeout(() => setReroutedAlert(null), 5000);
+      }
+    });
+
+    socket.on('signal_preemption', (data) => {
+      setTrafficSignals(prev => prev.map(s => s.name === data.signalName ? { ...s, status: data.status } : s));
+      setAlertFeed(prev => [`[SIGNAL] Preemption locked on ${data.signalName}`, ...prev]);
+    });
+
+    socket.on('emergency_completed', () => {
+      setAlertFeed(prev => ["Emergency completed successfully. Base stand-by engaged.", ...prev]);
+    });
+
+    return () => {
+      socket.off('emergency_alert');
+      socket.off('telemetry_update');
+      socket.off('reroute_triggered');
+      socket.off('signal_preemption');
+      socket.off('emergency_completed');
+      socket.off('obstruction_reported');
+    };
+  }, [isEmergency, backupRoutePoints, playBeep]);
 
   const handleActivation = () => {
     if (activationPhase === 'IDLE') {
@@ -161,7 +311,13 @@ export default function DriverDashboard() {
         setActivationPhase('ACTIVE');
         setIsEmergency(true);
         playSiren();
-        socket.emit('start_emergency', { unit: 'Unit 42', location: 'Central Hospital Base', eta: '08:45 MIN' });
+        socket.emit('start_emergency', { 
+          unit: 'Unit 42', 
+          location: 'Central Hospital Base', 
+          eta: '08:45 MIN',
+          mode: emergencyMode,
+          manualRadius: emergencyMode === 'MANUAL' ? manualRadius : undefined
+        });
       }, 2000); // 2 sec biometric scan
     } else if (activationPhase === 'ACTIVE') {
       playBeep('alert');
@@ -174,12 +330,62 @@ export default function DriverDashboard() {
   return (
     <div className="h-screen w-full bg-[#03050a] relative overflow-hidden font-sans selection:bg-blue-500/30 text-white">
       
-      {/* 3D Map Background */}
+      {/* Map Background (3D Canvas or 2D Leaflet) */}
       <div className="absolute inset-0 z-0">
-        <Canvas camera={{ position: [-14, 3, 2], fov: 45 }}>
-          <TacticalMapScene isEmergency={isEmergency} />
-        </Canvas>
+        {is2DMode ? (
+          <MapContainer 
+            activeRoute={isEmergency} 
+            role="driver" 
+            activeRoutePoints={activeRoutePoints}
+            backupRoutePoints={activeTab === 'backup' ? backupRoutePoints : activeTab === 'fastest' ? fastestRoutePoints : undefined}
+            ambulancePos={isEmergency ? ambulanceCoords : undefined}
+            heatmapData={showHeatmap ? [
+              { lat: 28.6145, lng: 77.2110, intensity: 0.8 },
+              { lat: 28.6160, lng: 77.2140, intensity: 0.9 },
+              { lat: 28.6190, lng: 77.2180, intensity: 0.75 },
+              { lat: 28.6120, lng: 77.2100, intensity: 0.3 },
+              { lat: 28.6235, lng: 77.2200, intensity: 0.4 }
+            ] : []}
+            trafficSignals={trafficSignals}
+          />
+        ) : (
+          <Canvas camera={{ position: [-14, 3, 2], fov: 45 }}>
+            <TacticalMapScene isEmergency={isEmergency} />
+          </Canvas>
+        )}
       </div>
+
+      {/* Dynamic Biometric Reroute Warning Banner */}
+      <AnimatePresence>
+        {reroutedAlert && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: -50 }} 
+            className="absolute top-20 left-1/2 -translate-x-1/2 z-[500] w-[450px] bg-red-950/90 border border-red-500 rounded-xl p-4 shadow-[0_0_50px_rgba(239,68,68,0.4)] backdrop-blur text-center"
+          >
+            <div className="text-xs uppercase tracking-widest text-red-500 font-black mb-1 animate-pulse">⚠️ AUTONOMOUS AI REROUTE DETECTED ⚠️</div>
+            <div className="text-sm font-bold text-white mb-2">{reroutedAlert}</div>
+            <div className="text-[10px] text-red-400/80 font-mono">ENABLING CORRIDOR BYPASS • REDIRECTING UPLINK ROUTE FOR SPEED</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Dynamic Obstruction Warning Banner */}
+      <AnimatePresence>
+        {reportedObstruction && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: -50 }} 
+            className="absolute top-20 left-1/2 -translate-x-1/2 z-[500] w-[450px] bg-amber-950/90 border border-amber-500 rounded-xl p-4 shadow-[0_0_50px_rgba(245,158,11,0.4)] backdrop-blur text-center"
+          >
+            <div className="text-xs uppercase tracking-widest text-amber-500 font-black mb-1 animate-pulse">⚠️ CAUTION: CORRIDOR OBSTRUCTION REPORTED ⚠️</div>
+            <div className="text-sm font-bold text-white mb-2">{reportedObstruction.type}: {reportedObstruction.details || 'Bypass operations initiated'}</div>
+            <div className="text-[10px] text-amber-400/80 font-mono">AI CORRIDOR RE-ROUTING SYSTEM STANDBY OR ENGAGED</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Global Vignette */}
       <div className="absolute inset-0 pointer-events-none z-10 shadow-[inset_0_0_150px_rgba(0,0,0,0.8)]" />
@@ -253,6 +459,72 @@ export default function DriverDashboard() {
           </div>
         </HolographicPanel>
 
+        {/* Dynamic Mode Configurator (Visible when IDLE) */}
+        {activationPhase === 'IDLE' && (
+          <HolographicPanel title="Adaptive Corridor Configurations" icon={<Zap className="w-4 h-4" />}>
+            <div className="space-y-4 pointer-events-auto">
+              {/* Smart Recommendation Banner */}
+              <div className="p-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 text-[10px] text-blue-300 font-medium">
+                <span className="font-bold uppercase tracking-wider text-blue-400 block mb-0.5">System Recommendation</span>
+                {recommendationReason}
+              </div>
+
+              {/* Selector Grid */}
+              <div className="grid grid-cols-2 gap-2 text-[9px] font-bold uppercase tracking-wider">
+                {[
+                  { id: 'URBAN_CRITICAL', name: 'Urban Critical', desc: '800m range', icon: '🏙️' },
+                  { id: 'STANDARD', name: 'Standard Emergency', desc: '1.5km range', icon: '🚑' },
+                  { id: 'TRAUMA_HIGHWAY', name: 'Trauma / Highway', desc: '2.3km range', icon: '🛣️' },
+                  { id: 'ADAPTIVE_AI', name: 'Adaptive AI', desc: 'Auto-Calculated', icon: '🧠' },
+                  { id: 'MANUAL', name: 'Manual Override', desc: 'Custom Radius', icon: '🎛️' }
+                ].map(mode => (
+                  <button
+                    key={mode.id}
+                    onClick={() => {
+                      playBeep('success');
+                      setEmergencyMode(mode.id);
+                    }}
+                    className={`p-2 rounded-lg border transition-all text-left flex flex-col justify-between ${
+                      emergencyMode === mode.id 
+                        ? 'bg-blue-600/20 text-white border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
+                        : 'bg-black/40 text-white/60 border-white/5 hover:border-white/20'
+                    } ${mode.id === 'MANUAL' ? 'col-span-2' : ''}`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span>{mode.icon}</span>
+                      <span>{mode.name}</span>
+                    </span>
+                    <span className="text-[7.5px] text-white/40 font-normal mt-0.5">{mode.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Manual Slider */}
+              {emergencyMode === 'MANUAL' && (
+                <div className="p-3 rounded-lg bg-black/40 border border-white/5 space-y-2">
+                  <div className="flex justify-between text-[9px] text-white/50 uppercase tracking-widest">
+                    <span>Custom Alert Radius</span>
+                    <span className="text-blue-400 font-mono font-bold">{manualRadius}m</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="500"
+                    max="3500"
+                    step="100"
+                    value={manualRadius}
+                    onChange={e => setManualRadius(Number(e.target.value))}
+                    className="w-full accent-blue-500 bg-white/10 rounded-lg appearance-none h-1 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[8px] text-white/30 font-mono">
+                    <span>500m</span>
+                    <span>3500m</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </HolographicPanel>
+        )}
+
         {/* Dynamic Activation Button */}
         <div className="relative mt-2 pointer-events-auto">
           {activationPhase === 'IDLE' && (
@@ -299,7 +571,7 @@ export default function DriverDashboard() {
         <AnimatePresence>
           {activationPhase === 'ACTIVE' && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex flex-col gap-5 mt-2">
-              <HolographicPanel title="AI Route Optimization" icon={<Navigation className="w-4 h-4" />} glowing>
+               <HolographicPanel title="AI Route Optimization" icon={<Navigation className="w-4 h-4" />} glowing>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center p-3 rounded bg-black/40 border border-white/5">
                     <div className="flex items-center gap-3">
@@ -318,8 +590,142 @@ export default function DriverDashboard() {
                     <div className="p-2 rounded bg-red-950/30 border border-red-500/30 text-center relative overflow-hidden">
                       <div className="absolute inset-0 bg-red-500/10 animate-pulse" />
                       <p className="text-[9px] text-red-400/80 uppercase tracking-widest mb-1 relative z-10">Live ETA</p>
-                      <p className="text-lg font-bold text-red-500 font-mono relative z-10">06:45<span className="text-[10px] text-red-400/50 ml-1">MIN</span></p>
+                      <p className="text-lg font-bold text-red-500 font-mono relative z-10">{isEmergency && activeRoutePoints === backupRoutePoints ? '08:00' : '11:00'}<span className="text-[10px] text-red-400/50 ml-1">MIN</span></p>
                     </div>
+                  </div>
+                </div>
+              </HolographicPanel>
+
+              {/* Route Stability & Confidence HUD */}
+              <HolographicPanel title="Route Stability & Confidence" icon={<Activity className="w-4 h-4" />} glowing>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-white/60">Route Stability</span>
+                    <span className={`font-mono font-bold ${routeStability > 80 ? 'text-green-400' : routeStability > 60 ? 'text-yellow-400' : 'text-red-500'}`}>{routeStability}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                    <div className={`h-full transition-all duration-500 ${routeStability > 80 ? 'bg-green-500' : routeStability > 60 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${routeStability}%` }} />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div className="p-2 rounded bg-black/40 border border-white/5 text-center">
+                      <p className="text-[8px] text-white/40 uppercase mb-1">Reroute Prob.</p>
+                      <p className="text-xs font-bold text-white font-mono">{rerouteProbability}%</p>
+                    </div>
+                    <div className="p-2 rounded bg-black/40 border border-white/5 text-center">
+                      <p className="text-[8px] text-white/40 uppercase mb-1">Delay Increase</p>
+                      <p className={`text-xs font-bold font-mono ${estimatedDelayIncrease > 0 ? 'text-red-400 animate-pulse' : 'text-green-400'}`}>+{estimatedDelayIncrease}m</p>
+                    </div>
+                    <div className="p-2 rounded bg-black/40 border border-white/5 text-center">
+                      <p className="text-[8px] text-white/40 uppercase mb-1">Pressure Score</p>
+                      <p className="text-xs font-bold text-blue-400 font-mono">{emergencyPressureScore}</p>
+                    </div>
+                  </div>
+                </div>
+              </HolographicPanel>
+
+              {/* Multi-Route Control Panel */}
+              <HolographicPanel title="Multi-Route Preview" icon={<Map className="w-4 h-4" />} glowing>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-1 text-[8px] font-bold uppercase tracking-wider">
+                    <button onClick={() => { playBeep('success'); setActiveTab('active'); }} className={`py-1 rounded border ${activeTab === 'active' ? 'bg-blue-600/20 text-white border-blue-500' : 'bg-black/40 text-white/40 border-white/5'}`}>Primary</button>
+                    <button onClick={() => { playBeep('success'); setActiveTab('backup'); }} className={`py-1 rounded border ${activeTab === 'backup' ? 'bg-blue-600/20 text-white border-blue-500' : 'bg-black/40 text-white/40 border-white/5'}`}>Janpath</button>
+                    <button onClick={() => { playBeep('success'); setActiveTab('fastest'); }} className={`py-1 rounded border ${activeTab === 'fastest' ? 'bg-blue-600/20 text-white border-blue-500' : 'bg-black/40 text-white/40 border-white/5'}`}>Express</button>
+                  </div>
+
+                  <div className="p-2.5 rounded bg-black/40 border border-white/5 text-[10px] space-y-1.5 font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Route Name:</span>
+                      <span className="text-white font-bold">{activeTab === 'active' ? 'CP Corridor' : activeTab === 'backup' ? 'Janpath Bypass' : 'Ashoka Express'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Est. Travel Time:</span>
+                      <span className="text-green-400 font-bold">{activeTab === 'active' ? '11 mins' : activeTab === 'backup' ? '9 mins' : '7 mins'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Traffic Pressure:</span>
+                      <span className={`font-bold ${activeTab === 'active' ? 'text-red-400' : activeTab === 'backup' ? 'text-yellow-400' : 'text-green-400'}`}>{activeTab === 'active' ? '78%' : activeTab === 'backup' ? '45%' : '22%'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Corridor Efficiency:</span>
+                      <span className="text-blue-400 font-bold">{activeTab === 'active' ? '65%' : activeTab === 'backup' ? '82%' : '94%'}</span>
+                    </div>
+                  </div>
+                </div>
+              </HolographicPanel>
+
+              {/* Tactical System Overlays */}
+              <HolographicPanel title="Tactical System Overlays" icon={<Settings className="w-4 h-4" />} glowing>
+                <div className="grid grid-cols-2 gap-2 text-[9px] font-bold uppercase tracking-wider">
+                  <button onClick={() => { playBeep('success'); setShowHeatmap(!showHeatmap); }} className={`p-2 rounded border text-center transition-colors ${showHeatmap ? 'bg-red-600/20 border-red-500 text-white' : 'bg-black/40 border-white/5 text-white/50'}`}>
+                    {showHeatmap ? '🔴 Heatmap ON' : '⚫ Heatmap OFF'}
+                  </button>
+                  <button onClick={() => { playBeep('success'); setIs2DMode(!is2DMode); }} className={`p-2 rounded border text-center transition-colors ${is2DMode ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-black/40 border-white/5 text-white/50'}`}>
+                    {is2DMode ? '🗺️ 2D Tactical' : '📐 3D Holo'}
+                  </button>
+                </div>
+              </HolographicPanel>
+
+              {/* Smart Corridor Alerts Ticker */}
+              <HolographicPanel title="Corridor Warning Net" icon={<Radio className="w-4 h-4" />} glowing>
+                <div className="text-[9px] font-mono space-y-1.5 h-20 overflow-y-auto custom-scrollbar">
+                  {alertFeed.map((alert, index) => (
+                    <div key={index} className={`pb-1 border-b border-white/5 ${alert.startsWith('[ALERT]') ? 'text-red-400 font-bold' : alert.startsWith('[SIGNAL]') ? 'text-green-400' : 'text-white/70'}`}>
+                      {alert}
+                    </div>
+                  ))}
+                </div>
+              </HolographicPanel>
+
+              {/* Live Emergency Corridor Status Panel */}
+              <HolographicPanel title="Live Emergency Corridor Status" icon={<Zap className="w-4 h-4" />} glowing>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center p-2.5 rounded bg-black/40 border border-red-500/20">
+                    <div>
+                      <p className="text-[9px] text-white/50 uppercase tracking-widest">Active Mode</p>
+                      <p className="text-xs font-black text-red-400 uppercase tracking-wider">{emergencyMode.replace('_', ' ')}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] text-white/50 uppercase tracking-widest">Main Radius</p>
+                      <p className="text-xs font-mono font-black text-white">{activeCorridorRadius}m</p>
+                    </div>
+                  </div>
+
+                  {adaptiveReason && (
+                    <div className="p-2.5 rounded border border-yellow-500/20 bg-yellow-500/5 text-[9px] text-yellow-400 font-mono">
+                      🧠 AI RATIONALE: {adaptiveReason}
+                    </div>
+                  )}
+
+                  {/* Layer visualization */}
+                  <div className="space-y-2">
+                    <div className="text-[8px] text-white/40 uppercase tracking-widest font-bold">Active Shield Layers:</div>
+                    
+                    <div className="flex items-center justify-between text-[10px] bg-black/40 border border-white/5 px-2.5 py-1.5 rounded">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" /> Public Civilians</span>
+                      <span className="font-mono font-bold text-white/80">{activePublicRadius}m</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] bg-black/40 border border-white/5 px-2.5 py-1.5 rounded">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" /> Traffic Signals</span>
+                      <span className="font-mono font-bold text-white/80">{activeSignalRadius}m</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] bg-black/40 border border-white/5 px-2.5 py-1.5 rounded">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500" /> Police Nodes</span>
+                      <span className="font-mono font-bold text-white/80">{activePoliceRadius}m</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                     <div className="p-2 rounded bg-black/40 border border-white/5 text-center">
+                        <p className="text-[8px] text-white/40 uppercase mb-1">Congestion Bypass</p>
+                        <p className="text-xs font-bold text-green-400 font-mono">-{estimatedDelayReduction}s</p>
+                     </div>
+                     <div className="p-2 rounded bg-black/40 border border-white/5 text-center">
+                        <p className="text-[8px] text-white/40 uppercase mb-1">Corridor ECEI</p>
+                        <p className="text-xs font-bold text-blue-400 font-mono">{eceiScore}%</p>
+                     </div>
                   </div>
                 </div>
               </HolographicPanel>

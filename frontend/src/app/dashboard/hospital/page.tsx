@@ -223,7 +223,7 @@ export default function ControlRoomDashboard() {
           </h3>
           <form className="space-y-2" onSubmit={async (e) => {
             e.preventDefault();
-            const form = e.target as HTMLFormElement;
+            const form = e.target as any;
             try {
               await axios.post('http://localhost:5005/api/auth/create-authority', {
                 role: form.role.value,

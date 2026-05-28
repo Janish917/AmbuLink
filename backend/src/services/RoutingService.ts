@@ -50,17 +50,18 @@ export class RoutingService {
   /**
    * Uses Turf.js to create a 500m buffer around the route and finds all authorities inside it
    */
-  static async findRelevantAuthoritiesAlongRoute(routeCoords: [number, number][]) {
+  static async findRelevantAuthoritiesAlongRoute(routeCoords: [number, number][], maxRadiusMeters: number = 1500) {
     // routeCoords are [lat, lng]. Turf expects [lng, lat].
     const lineString = turf.lineString(routeCoords.map(c => [c[1], c[0]]));
     
-    // Create a 500 meter buffer polygon
-    const routeBuffer = turf.buffer(lineString, 0.5, { units: 'kilometers' });
+    // Create a dynamic buffer polygon in kilometers
+    const radiusKm = maxRadiusMeters / 1000.0;
+    const routeBuffer = turf.buffer(lineString, radiusKm, { units: 'kilometers' });
 
     // Fetch all authorities (in a real app, query by bounding box first)
     const authorities = await prisma.user.findMany({
       where: {
-        role: { in: ['POLICE', 'TRAFFIC_OP', 'SYSTEM_NODE'] },
+        role: { in: ['POLICE', 'TRAFFIC_OP', 'SYSTEM_NODE', 'HOSPITAL'] },
         lat: { not: null },
         lng: { not: null }
       }
@@ -71,7 +72,7 @@ export class RoutingService {
     for (const auth of authorities) {
       const point = turf.point([auth.lng!, auth.lat!]);
       
-      // Check if authority is inside the 500m corridor
+      // Check if authority is inside the dynamic corridor
       if (routeBuffer && turf.booleanPointInPolygon(point, routeBuffer as any)) {
         // Calculate nearest point on the route to estimate ETA
         const nearestPoint = turf.nearestPointOnLine(lineString, point);
@@ -79,7 +80,7 @@ export class RoutingService {
         // Simple heuristic for ETA: distance along the line
         const distanceAlongRoute = nearestPoint.properties.location; // distance from start in km
         const totalDistance = turf.length(lineString, { units: 'kilometers' });
-        const etaFraction = distanceAlongRoute / totalDistance;
+        const etaFraction = totalDistance > 0 ? (distanceAlongRoute / totalDistance) : 0;
 
         relevantNodes.push({
           authorityId: auth.id,
