@@ -3,7 +3,11 @@ import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key-for-dev';
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET is missing");
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
   const token = req.cookies.token || req.headers.authorization?.split(' ')[1];

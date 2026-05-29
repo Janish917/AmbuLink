@@ -1,5 +1,7 @@
 'use client';
 
+import { API_URL } from '@/config/api';
+
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, Activity, Eye, EyeOff, Loader2, KeyRound, Lock, ShieldCheck, Cpu, Terminal, Scan, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
@@ -126,7 +128,7 @@ export default function LoginPage() {
   useEffect(() => {
     const fetchHospitals = async () => {
       try {
-        const res = await axios.get('http://localhost:5005/api/auth/hospitals');
+        const res = await axios.get(`${API_URL}/api/auth/hospitals`);
         setHospitals(res.data);
         if (res.data.length > 0) {
           setRegisteredHospitalId(res.data[0].hospitalId);
@@ -168,7 +170,7 @@ export default function LoginPage() {
     setLoadingText('Requesting Uplink OTP...');
 
     try {
-      const res = await axios.post('http://localhost:5005/api/auth/forgot-password', { role: activeRole, id: userId });
+      const res = await axios.post(`${API_URL}/api/auth/forgot-password`, { role: activeRole, id: userId });
       alert(`SYSTEM OTP GENERATED: ${res.data.otp}`);
       setSuccessMsg('OTP has been dispatched. Enter it below.');
       setOtpSent(true);
@@ -190,7 +192,7 @@ export default function LoginPage() {
     setLoadingText('Verifying Protocol Override...');
 
     try {
-      await axios.post('http://localhost:5005/api/auth/reset-password', { role: activeRole, id: userId, otp, newPassword });
+      await axios.post(`${API_URL}/api/auth/reset-password`, { role: activeRole, id: userId, otp, newPassword });
       setSuccessMsg('Protocol Override Successful. You can now login.');
       setIsForgotPassword(false); 
       setOtpSent(false); 
@@ -235,7 +237,7 @@ export default function LoginPage() {
           email: activeRole === 'DRIVER' ? email : undefined,
           ambulanceNumber: activeRole === 'DRIVER' ? ambulanceNumber : undefined,
         };
-        await axios.post('http://localhost:5005/api/auth/register', payload);
+        await axios.post(`${API_URL}/api/auth/register`, payload);
         if (activeRole === 'DRIVER') {
           setSuccessMsg('Registration submitted. Pending hospital approval.');
         } else {
@@ -255,7 +257,7 @@ export default function LoginPage() {
         setTimeout(() => setLoadingText('Bypassing Node Security...'), 400);
         setTimeout(() => setLoadingText('Verifying Authority...'), 800);
 
-        const response = await axios.post('http://localhost:5005/api/auth/login', {
+        const response = await axios.post(`${API_URL}/api/auth/login`, {
           role: activeRole, id: userId, password: password
         }, { withCredentials: true });
         

@@ -5,7 +5,11 @@ import jwt from 'jsonwebtoken';
 
 const router = Router();
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key-for-dev';
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET is missing");
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 
 router.get('/hospitals', async (req, res) => {
   try {
@@ -116,7 +120,11 @@ router.post('/register', async (req, res) => {
 
     // Nonce verification ONLY for non-driver roles
     if (role !== 'DRIVER') {
-      const requiredNonce = process.env.HOSPITAL_NONCE || 'SAPS-AUTH-2026';
+      if (!process.env.HOSPITAL_NONCE) {
+  throw new Error("HOSPITAL_NONCE is missing");
+}
+
+const requiredNonce = process.env.HOSPITAL_NONCE;
       if (nonce !== requiredNonce) {
         return res.status(403).json({ error: 'Invalid Authority Nonce. Registration rejected.' });
       }

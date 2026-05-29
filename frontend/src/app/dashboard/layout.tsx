@@ -1,4 +1,4 @@
-import { ShieldAlert, Map, LogOut, Settings, Bell, User } from 'lucide-react';
+import { ShieldAlert, Map, LogOut, Settings, Bell, User, Radio, Activity } from 'lucide-react';
 import Link from 'next/link';
 import LogoutButton from '@/components/LogoutButton';
 import { cookies } from 'next/headers';
@@ -73,10 +73,28 @@ export default async function DashboardLayout({
 
           {/* Everyone can see Replay for now, or maybe only POLICE/HOSPITAL */}
           {(userRole === 'HOSPITAL' || userRole === 'POLICE') && (
-            <Link href="/dashboard/replay" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
-              <Map className="w-4 h-4" />
-              Route Replay & Analytics
-            </Link>
+            <>
+              <Link href="/dashboard/simulator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+                Emergency Simulator
+              </Link>
+              <Link href="/dashboard/coordinator" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
+                <Radio className="w-4 h-4 text-cyan-400" />
+                Fleet Coordinator
+              </Link>
+              <Link href="/dashboard/compliance" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
+                <Radio className="w-4 h-4 text-purple-400" style={{ transform: 'rotate(90deg)' }} />
+                Compliance Analyst
+              </Link>
+              <Link href="/dashboard/hospital" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
+                <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+                Hospital Balancer
+              </Link>
+              <Link href="/dashboard/replay" className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 text-white/70 hover:text-white transition-colors">
+                <Map className="w-4 h-4" />
+                Route Replay & Analytics
+              </Link>
+            </>
           )}
         </div>
 

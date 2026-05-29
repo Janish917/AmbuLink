@@ -103,6 +103,10 @@ model EmergencySession {
   pressureLogs            EmergencyPressureLog[]
   rerouteTriggers         RerouteTrigger[]
   policeInterventions     PoliceIntervention[]
+  simulationRunId         String?
+  simulationRun           SimulationRun?    @relation(fields: [simulationRunId], references: [id])
+  fleetRunId              String?
+  fleetRun                FleetCoordinationRun? @relation(fields: [fleetRunId], references: [id])
 }
 
 model Alert {
@@ -223,4 +227,122 @@ model PoliceIntervention {
   details        String?
   timestamp      DateTime         @default(now())
   session        EmergencySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model SimulationRun {
+  id                  String             @id @default(uuid())
+  scenarioName        String
+  intensity           Int
+  ambulanceCount      Int
+  aiAggression        String
+  speed               Float
+  status              String             @default("RUNNING") // "RUNNING", "COMPLETED"
+  efficiencyScore     Float?
+  averageDelay        Float?
+  rerouteCount        Int?
+  stabilityMetric     Float?
+  policeEffectiveness Float?
+  recoveryDuration    Int?
+  createdAt           DateTime           @default(now())
+  sessions            EmergencySession[]
+  snapshots           SimulationSnapshot[]
+}
+
+model SimulationSnapshot {
+  id              String         @id @default(uuid())
+  simulationRunId String
+  tick            Int
+  timestamp       DateTime       @default(now())
+  heatmapData     String         // JSON string of sector densities
+  blockages       String         // JSON string of active road blockages
+  events          String         // JSON string of event messages
+  ambulancePos    String         // JSON string of ambulance locations/ETAs
+  simulationRun   SimulationRun  @relation(fields: [simulationRunId], references: [id], onDelete: Cascade)
+}
+
+model FleetCoordinationRun {
+  id                  String             @id @default(uuid())
+  status              String             @default("ACTIVE") // "ACTIVE", "COMPLETED"
+  ambulanceCount      Int
+  corridorUtilization Float
+  conflictCount       Int
+  signalOverridesCount Int
+  rerouteCount        Int                @default(0)
+  averageDelay        Float
+  efficiencyScore     Float
+  createdAt           DateTime           @default(now())
+  sessions            EmergencySession[]
+  logs                FleetCoordinationLog[]
+}
+
+model FleetCoordinationLog {
+  id          String               @id @default(uuid())
+  runId       String
+  tick        Int
+  timestamp   DateTime             @default(now())
+  logType     String               // "CONFLICT_DETECTED", "REROUTE_ASSIGNED", "SIGNAL_PREEMPTED"
+  message     String
+  run         FleetCoordinationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model ComplianceRun {
+  id                    String              @id @default(uuid())
+  status                String              @default("ACTIVE") // "ACTIVE", "COMPLETED"
+  cityComplianceIndex   Float
+  cooperationIndex      Float
+  delayProbability      Float
+  mobilityRating        Float
+  createdAt             DateTime            @default(now())
+  snapshots             ComplianceSnapshot[]
+}
+
+model ComplianceSnapshot {
+  id              String         @id @default(uuid())
+  runId           String
+  tick            Int
+  timestamp       DateTime       @default(now())
+  sectorData      String         // JSON string of sector compliance ratings
+  recommendations String         // JSON string of police suggestions
+  alerts          String         // JSON string of event messages
+  run             ComplianceRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model Hospital {
+  id                  String             @id @default(uuid())
+  name                String
+  lat                 Float
+  lng                 Float
+  icuBedsTotal        Int
+  icuBedsOccupied     Int
+  traumaBedsTotal     Int
+  traumaBedsOccupied  Int
+  erQueueLoad         Int
+  doctorsAvailable    Int
+  doctorsTotal        Int
+  surgeryQueueLoad    Int
+  status              String             @default("NORMAL") // "NORMAL", "HIGH_PRESSURE", "OVERLOADED"
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model HospitalAllocationRun {
+  id                    String                         @id @default(uuid())
+  status                String                         @default("ACTIVE") // "ACTIVE", "COMPLETED"
+  efficiencyScore       Float
+  averageIntakeTimeSec  Int
+  redirectsCount        Int                            @default(0)
+  createdAt             DateTime                       @default(now())
+  snapshots             HospitalAllocationSnapshot[]
+}
+
+model HospitalAllocationSnapshot {
+  id              String                @id @default(uuid())
+  runId           String
+  tick            Int
+  timestamp       DateTime              @default(now())
+  hospitalData    String                // JSON string of hospital loads and metrics
+  activeAllocations String              // JSON string of ambulance -> hospital allocations
+  recommendations String                // JSON string of AI suggestions
+  alerts          String                // JSON string of event messages
+  run             HospitalAllocationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 }
