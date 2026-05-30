@@ -9,7 +9,6 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, PerspectiveCamera, Float, MeshDistortMaterial, Sphere, Line } from '@react-three/drei';
 import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { ReactLenis } from '@studio-freight/react-lenis';
 
 // ---------------------------------------------------------
 // 3D SCENE COMPONENTS
@@ -245,7 +244,6 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <ReactLenis root>
       <main className="min-h-screen bg-[#040816] text-white selection:bg-[#ff3131]/30 overflow-hidden relative font-sans">
         <BackgroundScene mouse={mouse} />
 
@@ -615,6 +613,5 @@ export default function LandingPage() {
           }
         `}} />
       </main>
-    </ReactLenis>
   );
 }
